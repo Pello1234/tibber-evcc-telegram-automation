@@ -3,8 +3,6 @@
 Automatisierte Strompreis-Auswertung mit **Tibber**, **EVCC** und direkter Benachrichtigung per **Telegram-Bot**.
 Ideal für alle, die ihr E-Auto optimal günstig laden und dabei immer informiert bleiben wollen.
 
-[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20me%20a%20coffee-Ko--fi-FF5E5B?style=flat-square\&logo=ko-fi\&logoColor=white)](https://ko-fi.com/pello1234)
-
 ---
 
 ## 🛑 Voraussetzungen
@@ -32,7 +30,7 @@ Um diese Automatisierung zu nutzen, benötigst du:
 * Reminder vor günstigen Strompreis-Blöcken (Telegram-Alarm mit Zeitblock, Preisliste, beste Stunde ⭐️, keine Dopplung dank Lockfile)
 * Automatische **Ladeempfehlung** für dein E-Auto, abgestimmt auf SOC, Ziel und Wallbox-Leistung
 * Übersichtliche Telegram-Nachrichten (Preis, Zeitblock, Dauer, SOC, Kosten, …)
-* **Einfache Konfiguration per `.env`-Datei** – keine Code-Anpassung nötig
+* **Einfache Konfiguration per ****`.env`****-Datei** – keine Code-Anpassung nötig
 * Komplett als Shell/Bash-Skripte, läuft lokal (z. B. auf Raspberry Pi, Home Server, NAS etc.)
 * Kein Cloud-Backend, keine Drittanbieter-Cloud nötig
 
@@ -206,6 +204,48 @@ Morgen:
 
 ---
 
+## 🏠 Home Assistant Integration (per SSH)
+
+Du kannst das Skript `ladeempfehlung.sh` automatisch auf deinem Raspberry Pi (oder einem anderen Linux-Host) ausführen, wenn dein E-Auto nach Hause kommt und z. B. der SOC unter 80 % liegt.
+Die Ausführung erfolgt sicher über SSH – ideal für Home Assistant im Container, auf Synology, VM, etc.
+
+### Beispiel: `shell_command` in `configuration.yaml`
+
+```yaml
+shell_command:
+  ladeempfehlung_id4: 'ssh -i /config/.ssh/id_rsa -o StrictHostKeyChecking=no pi@192.168.178.99 "bash /home/pi/tibber-evcc-telegram-automation/ladeempfehlung.sh"'
+```
+
+**Wichtige Hinweise:**
+
+* SSH-Key vorher zwischen Home Assistant und Zielsystem austauschen (`ssh-copy-id` oder Schlüssel händisch kopieren)
+* Skript muss auf dem Pi/Server ausführbar sein (`chmod +x ladeempfehlung.sh`)
+* Pfad und User ggf. an dein Setup anpassen
+
+### Beispiel-Automation (automations.yaml)
+
+```yaml
+- id: '1738000000000'
+  alias: Ladeskript starten bei Heimkehr ID.4 mit SOC < 80%
+  trigger:
+    - platform: state
+      entity_id: device_tracker.id_4_position
+      to: 'home'
+  condition:
+    - condition: numeric_state
+      entity_id: sensor.id_4_battery_level
+      below: 80
+  action:
+    - service: shell_command.ladeempfehlung_id4
+  mode: single
+```
+
+> **Hinweis:**
+>
+> Wenn Home Assistant und deine Bash-Skripte in getrennten Containern oder auf unterschiedlichen Systemen laufen (z. B. Home Assistant als Docker-Container, Skripte direkt auf dem Raspberry Pi), können sie **nicht direkt aufeinander zugreifen**. Auch das lokale Ausführen von Shell-Kommandos aus Home Assistant heraus funktioniert dann nicht, weil Container voneinander isoliert sind.
+>
+> Die empfohlene Lösung ist deshalb, das gewünschte Bash-Skript **per SSH von Home Assistant aus remote zu starten** (siehe oben). Das ist sicher, flexibel und funktioniert auch bei Container-Setups, auf NAS, in VMs oder bei verteilten Systemen.
+
 ## 🛠️ Tipps & FAQ
 
 **Häufige Fragen:**
@@ -228,8 +268,6 @@ Morgen:
 
 Du nutzt das Projekt gerne oder hast ein paar Cent gespart?
 Unterstütze mich gerne mit einer kleinen Spende:
-
-[![Ko-fi](https://img.shields.io/badge/Buy%20me%20a%20coffee-Ko--fi-FF5E5B?style=flat-square\&logo=ko-fi\&logoColor=white)](https://ko-fi.com/pello1234)
 
 ---
 
