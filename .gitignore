@@ -1,0 +1,9 @@
+# Sensible Dateien
+token.env
+*.log
+
+# Temporäres
+/tmp/
+guenstige_stunden.txt
+alle_stundenpreise.txt
+
