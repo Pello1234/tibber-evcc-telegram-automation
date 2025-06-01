@@ -249,6 +249,8 @@ shell_command:
 >
 > Die empfohlene Lösung ist deshalb, das gewünschte Bash-Skript **per SSH von Home Assistant aus remote zu starten** (siehe oben). Das ist sicher, flexibel und funktioniert auch bei Container-Setups, auf NAS, in VMs oder bei verteilten Systemen.
 
+---
+
 ## 🛠️ Tipps & FAQ
 
 **Häufige Fragen:**
@@ -273,6 +275,7 @@ Du nutzt das Projekt gerne oder hast ein paar Cent gespart?
 Unterstütze mich gerne mit einer kleinen Spende:
 
 [![Ko-fi](https://img.shields.io/badge/Buy%20me%20a%20coffee-Ko--fi-FF5E5B?style=flat-square&logo=ko-fi&logoColor=white)](https://ko-fi.com/pello1234)
+
 ---
 
 ## ⚠️ Disclaimer
