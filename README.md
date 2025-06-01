@@ -5,6 +5,9 @@ Ideal für alle, die ihr E-Auto optimal günstig laden und dabei immer informier
 
 ---
 
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20me%20a%20coffee-Ko--fi-FF5E5B?style=flat-square&logo=ko-fi&logoColor=white)](https://ko-fi.com/pello1234)
+
+
 ## 🛑 Voraussetzungen
 
 Um diese Automatisierung zu nutzen, benötigst du:
@@ -269,6 +272,7 @@ shell_command:
 Du nutzt das Projekt gerne oder hast ein paar Cent gespart?
 Unterstütze mich gerne mit einer kleinen Spende:
 
+[![Ko-fi](https://img.shields.io/badge/Buy%20me%20a%20coffee-Ko--fi-FF5E5B?style=flat-square&logo=ko-fi&logoColor=white)](https://ko-fi.com/pello1234)
 ---
 
 ## ⚠️ Disclaimer
