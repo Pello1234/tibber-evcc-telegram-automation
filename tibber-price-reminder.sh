@@ -33,14 +33,22 @@ LOCK_DIR="/tmp"
 # === Nächste günstige Phase ermitteln ===
 PHASE=$(grep -E "^(20|21)[0-9]{2}-" "$GUENSTIGE" | while read -r zeile; do
   ts=$(echo "$zeile" | awk '{print $1}')
+  preis=$(echo "$zeile" | awk '{print $2}')
   label=$(echo "$zeile" | awk '{print $3}')
   start_epoch=$(date -d "$ts" +%s)
   diff_sec=$((start_epoch - JETZT_EPOCH))
-  if [ "$diff_sec" -ge 0 ]; then
+
+  if [ "$TESTMODE" = true ] || [ "$IGNORE_LOCK" = true ]; then
+    echo "$ts $label"
+    break
+  fi
+
+  if [ "$diff_sec" -le "$TOLERANZ_SEK" ] && [ "$diff_sec" -ge -$TOLERANZ_SEK ]; then
     echo "$ts $label"
     break
   fi
 done)
+
 
 if [ -z "$PHASE" ]; then
   log "Keine Phase in Toleranz gefunden."
@@ -110,5 +118,9 @@ if [ -x "$LADEEMPFEHLUNG_SH" ]; then
   "$LADEEMPFEHLUNG_SH" --from-reminder
 fi
 
-touch "$LOCKFILE"
-log "Reminder gesendet für $PHASE_HASH ($DAUER_LABEL $DAUER_VON-$DAUER_BIS)."
+if [ "$TESTMODE" != true ] && [ "$IGNORE_LOCK" != true ]; then
+  touch "$LOCKFILE"
+  log "Reminder gesendet für $PHASE_HASH ($DAUER_LABEL $DAUER_VON-$DAUER_BIS)."
+else
+  log "Testmodus oder --ignore-lock aktiv – kein Lockfile geschrieben ($PHASE_HASH)."
+fi
