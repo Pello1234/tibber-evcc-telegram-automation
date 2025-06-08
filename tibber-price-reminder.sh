@@ -1,7 +1,13 @@
 #!/bin/bash
-set -euo pipefail
 
-# === ENVFILE flexibel laden (Standard: .../token.env) ===
+TESTMODE=false
+IGNORE_LOCK=false
+for arg in "$@"; do
+  [[ "$arg" == "--test" ]] && TESTMODE=true
+  [[ "$arg" == "--ignore-lock" ]] && IGNORE_LOCK=true
+done
+
+# === .env laden ===
 ENVFILE="${ENVFILE:-/home/pi/tibber-evcc-telegram-automation/token.env}"
 if [ -f "$ENVFILE" ]; then
   set -a
@@ -12,144 +18,92 @@ else
   exit 1
 fi
 
-# === ALLE Variablen werden aus der ENV geladen ===
-# Erwartet werden:
-# TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, EVCC_API, LOCKFILE, TOLERANZ_MIN, GUENSTIGE, LADEEMPFEHLUNG_SH
-
-# --- Preisformatierung für Telegram ---
-format_preis() {
-  local raw="$1"
-  if (( $(echo "$raw < 1" | bc -l) )); then
-    printf "%.2f Cent" "$(echo "$raw * 100" | bc -l)" | sed 's/\./,/'
-  else
-    printf "%.2f €" "$raw" | sed 's/\./,/'
-  fi
+# === Logging ===
+log() {
+  LOGFILE_PATH="${REMINDER_LOG:-/tmp/reminder.log}"
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >> "$LOGFILE_PATH"
 }
 
-# --- Optionen ---
-TESTMODE=false
-IGNORE_LOCK=false
-for arg in "$@"; do
-  case $arg in
-    --test)         TESTMODE=true;;
-    --ignore-lock)  IGNORE_LOCK=true;;
-  esac
-done
+# === Konfiguration ===
+TOLERANZ_SEK=$((TOLERANZ_MIN * 60))
+JETZT_EPOCH=$(date +%s)
+LOCK_DIR="/tmp"
 
-NOW_EPOCH=$(date +"%s")
-ZIEL_EPOCH=$(date -d "+1 hour" +"%s")    # Reminder eine Stunde vor Phase-Start
+# === Nächste günstige Phase ermitteln ===
+PHASE=$(grep -E "^(20|21)[0-9]{2}-" "$GUENSTIGE" | while read -r zeile; do
+  ts=$(echo "$zeile" | awk '{print $1}')
+  preis=$(echo "$zeile" | awk '{print $2}')
+  label=$(echo "$zeile" | awk '{print $3}')
+  start_epoch=$(date -d "$ts" +%s)
+  diff_sec=$((start_epoch - JETZT_EPOCH))
+  if [ "$diff_sec" -ge 0 ]; then
+    echo "$ts $label"
+    break
+  fi
+done)
 
-# --- Ladevorgang abfragen ---
-is_charging=$(curl -s "$EVCC_API" | jq -r '.result.loadpoints[0].charging // .result.loadpoints[0].vehicleConnected')
-if [[ "$is_charging" == "true" ]]; then
-  echo "🚗 Das Auto lädt gerade – Reminder übersprungen."
+if [ -z "$PHASE" ]; then
+  log "Keine Phase in Toleranz gefunden."
   exit 0
 fi
 
-[ ! -f "$GUENSTIGE" ] && exit 0
+START_TS=$(echo "$PHASE" | awk '{print $1}')
+LABEL=$(echo "$PHASE" | awk '{print $2}')
+PHASE_EPOCH=$(date -d "$START_TS" +%s)
+PHASE_HASH="reminder_${LABEL}_$(date -d "$START_TS" +%Y-%m-%d_%H:%M)"
+LOCKFILE="$LOCK_DIR/$PHASE_HASH"
 
-# --- Stunden einlesen (doppelte Timestamps vermeiden) ---
-mapfile -t STUNDEN < <(awk '!seen[$1]++' "$GUENSTIGE")
+if [ "$IGNORE_LOCK" != true ] && [ -f "$LOCKFILE" ]; then
+  log "Reminder bereits gesendet ($PHASE_HASH), Abbruch."
+  exit 0
+fi
 
-# --- Phasen/Blöcke bilden ---
-PHASES=()
-CURRENT_PHASE=()
-for ((i=0; i<${#STUNDEN[@]}; i++)); do
-  TS=$(echo "${STUNDEN[$i]}" | awk '{print $1}')
-  TS_EPOCH=$(date -d "$TS" +"%s")
-  [ "$TS_EPOCH" -le "$NOW_EPOCH" ] && continue
+# === Stunden der Phase sammeln ===
+ENDE_EPOCH=$PHASE_EPOCH
+BEST_PREIS=999
+TEXT=""
 
-  if [ ${#CURRENT_PHASE[@]} -eq 0 ]; then
-    CURRENT_PHASE+=("${STUNDEN[$i]}")
-  else
-    LAST_TS=$(echo "${CURRENT_PHASE[-1]}" | awk '{print $1}')
-    LAST_TS_EPOCH=$(date -d "$LAST_TS" +"%s")
-    if (( TS_EPOCH == LAST_TS_EPOCH + 3600 )); then
-      CURRENT_PHASE+=("${STUNDEN[$i]}")
-    else
-      PHASES+=( "$(IFS=$'\n'; echo "${CURRENT_PHASE[*]}")" )
-      CURRENT_PHASE=( "${STUNDEN[$i]}" )
-    fi
+while read -r ts preis label; do
+  [ "$label" != "$LABEL" ] && continue
+  ts_epoch=$(date -d "$ts" +%s)
+  if [ "$ts_epoch" -lt "$PHASE_EPOCH" ]; then
+    continue
   fi
-done
-[ ${#CURRENT_PHASE[@]} -gt 0 ] && PHASES+=( "$(IFS=$'\n'; echo "${CURRENT_PHASE[*]}")" )
+  diff=$((ts_epoch - PHASE_EPOCH))
+  [ $diff -gt 21600 ] && break
 
-# --- Reminder je Phase ---
-for PHASE in "${PHASES[@]}"; do
-  FIRST_LINE=$(echo "$PHASE" | head -n1)
-  PHASE_START=$(echo "$FIRST_LINE" | awk '{print $1}')
+  stunde=$(date -d "$ts" +%H)
+  von="${stunde}:00"
+  bis=$(printf "%02d:00" $((10#$stunde + 1)))
+  preis_fmt=$(awk -v p="$preis" 'BEGIN { if (p < 1) printf "%.2f Cent", p*100; else printf "%.2f Euro", p }' | sed 's/\./,/')
+  zeile="🕓 $von bis $bis Uhr – 💶 $preis_fmt"
 
-  # --- Dynamisches Label ---
-  PHASE_DATE=$(date -d "$PHASE_START" +"%Y-%m-%d")
-  TODAY=$(date +%Y-%m-%d)
-  TOMORROW=$(date -d "tomorrow" +%Y-%m-%d)
-  if [ "$PHASE_DATE" = "$TODAY" ]; then
-    PHASE_LABEL="heute"
-  elif [ "$PHASE_DATE" = "$TOMORROW" ]; then
-    PHASE_LABEL="morgen"
-  else
-    PHASE_LABEL="am $(date -d "$PHASE_START" +%d.%m.%Y)"
+  preis_cmp=$(awk -v p="$preis" 'BEGIN { printf "%.4f", p }')
+  if (( $(echo "$preis_cmp < $BEST_PREIS" | bc -l) )); then
+    BEST_PREIS="$preis_cmp"
+    zeile="$zeile⭐️"
   fi
 
-  PHASE_START_EPOCH=$(date -d "$PHASE_START" +"%s")
-  DIFF_SEC=$((PHASE_START_EPOCH - ZIEL_EPOCH))
+  TEXT+="$zeile"$'\n'
+  ENDE_EPOCH=$ts_epoch
+done < "$GUENSTIGE"
 
-  # Hash für diese Phase (gegen Mehrfachbenachrichtigung)
-  
-    LAST_LINE=$(echo "$PHASE" | tail -n1 | awk '{print $1}')
-  HASH="reminder_${PHASE_LABEL}_$(date -d "$PHASE_START" +%Y-%m-%d_%H:%M)_$(date -d "$LAST_LINE" +%H:%M)"
+DAUER_VON=$(date -d "@$PHASE_EPOCH" +%H:%M)
+DAUER_BIS=$(date -d "@$((ENDE_EPOCH + 3600))" +%H:%M)
+DAUER_LABEL=$( [ "$LABEL" == "heute" ] && echo "heute" || echo "morgen" )
 
-  if $TESTMODE || (( DIFF_SEC >= -TOLERANZ_MIN*60 && DIFF_SEC <= TOLERANZ_MIN*60 )); then
-    if [[ "$IGNORE_LOCK" != true ]] && grep -q "$HASH" "$LOCKFILE" 2>/dev/null; then
-      continue
-    fi
+NACHRICHT="🔔 Günstige Strompreisphase beginnt bald!
 
-    START_LOCAL=$(date -d "$PHASE_START" +"%H:%M")
-    ENDE_LOCAL=$(date -d "$LAST_LINE +59 min" +"%H:%M")
-    STAND=$(date +"%d.%m.%Y %H:%M Uhr")
-    [[ "$IGNORE_LOCK" != true ]] && echo "$HASH" >> "$LOCKFILE"
+💡 Dauer: $DAUER_LABEL $DAUER_VON bis $DAUER_BIS Uhr
 
-    # Günstigste Stunde im Block finden
-    min_idx=0; min_preis=999
-    IFS=$'\n' read -r -a lines <<< "$PHASE"
-    for idx in "${!lines[@]}"; do
-      preis=$(echo "${lines[$idx]}" | awk '{print $2}')
-      if (( $(echo "$preis < $min_preis" | bc -l) )); then
-        min_preis="$preis"
-        min_idx=$idx
-      fi
-    done
+$TEXT
+📅 Stand: $(date '+%d.%m.%Y %H:%M Uhr')"
 
+# === Telegram senden ===
+curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
+  --data-urlencode "chat_id=$TELEGRAM_CHAT_ID" \
+  --data-urlencode "text=$NACHRICHT" \
+  -d parse_mode=Markdown >/dev/null
 
-    # Preisliste aufbauen
-    PREISLISTE=""
-    for idx in "${!lines[@]}"; do
-      line="${lines[$idx]}"
-      TS2=$(echo "$line" | awk '{print $1}')
-      RAW=$(echo "$line" | awk '{print $2}')
-      VON=$(date -d "$TS2" +"%H:%M")
-      BIS=$(date -d "$TS2 +59 min" +"%H:%M")
-      PREIS_FMT=$(format_preis "$RAW")
-      if [ "$idx" -eq "$min_idx" ]; then
-        PREISLISTE+="🕓 $VON bis $BIS Uhr – 💶 $PREIS_FMT ⭐️"$'\n'
-      else
-        PREISLISTE+="🕓 $VON bis $BIS Uhr – 💶 $PREIS_FMT"$'\n'
-      fi
-    done
-
-    MESSAGE="🔔 *Günstige Strompreisphase beginnt bald!* ($PHASE_LABEL)
-
-💡 Dauer: *$START_LOCAL bis $ENDE_LOCAL Uhr*
-
-$PREISLISTE
-📅 Stand: $STAND"
-
-    curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
-      --data-urlencode "chat_id=$TELEGRAM_CHAT_ID" \
-      --data-urlencode "text=$MESSAGE" \
-      -d parse_mode=Markdown
-
-    # Ladeempfehlung optional anhängen
-    (sleep 10 && bash "$LADEEMPFEHLUNG_SH") &
-  fi
-done
+touch "$LOCKFILE"
+log "Reminder gesendet für $PHASE_HASH ($DAUER_LABEL $DAUER_VON-$DAUER_BIS)."
