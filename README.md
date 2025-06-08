@@ -139,8 +139,11 @@ ALLE=/pfad/zur/alle_stundenpreise.txt
 LOG=/pfad/zur/ladeempfehlung.log
 LOCKFILE=/tmp/evcc_phase_reminder.lock
 
-# Zeit-Toleranz für Reminder (in Minuten)
-TOLERANZ_MIN=5
+# === Reminder/Automation ===
+# Zeit-Toleranz (in Minuten) für Reminder rund um Phasenstart
+TOLERANZ_MIN=60
+# Pfad zum Script für Ladeempfehlung (wird ggf. vom Reminder aufgerufen)
+LADEEMPFEHLUNG_SH=/home/pi/tibber-evcc-telegram-automation/ladeempfehlung.sh
 
 # Pfad zum Ladeempfehlungs-Skript
 LADEEMPFEHLUNG_SH=/pfad/zur/ladeempfehlung.sh
