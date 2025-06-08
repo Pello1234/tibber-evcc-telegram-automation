@@ -1,5 +1,12 @@
 #!/bin/bash
 
+IGNORE_LOCK=false
+for arg in "$@"; do
+  if [[ "$arg" == "--ignore-lock" ]]; then
+    IGNORE_LOCK=true
+  fi
+done
+
 # === ENV-File einlesen (über Umgebungsvariable oder Default) ===
 ENVFILE="${ENVFILE:-/home/pi/tibber-evcc-telegram-automation/token.env}"
 if [ -f "$ENVFILE" ]; then
@@ -47,7 +54,8 @@ log "Preise für morgen gefunden: $HAT_MORGEN"
 
 # === Forecast-Nachricht nur senden, wenn noch kein Lockfile existiert ===
 if [ "$HAT_MORGEN" -gt 0 ]; then
-  if [ -f "$LOCKFILE" ]; then
+  if [ -f "$LOCKFILE" ] && [ "$IGNORE_LOCK" != "true" ]; then
+    echo "Script wurde heute bereits ausgeführt. Mit --ignore-lock erneut starten."
     log "Lockfile existiert bereits, Forecast-Nachricht wird nicht erneut gesendet."
     exit 0
   fi
@@ -152,22 +160,30 @@ $(get_block "morgen")"
   done < "$FORECAST_FILE"
 fi
 
-# === Nachricht zusammensetzen ===
+## === Nachricht zusammensetzen ===
 MESSAGE="⚡ Tibber Forecast für heute & morgen ⚡
 
 📉 Günstiger Strom unter 20 Cent:
 $BLOCKS
 "
 
-if [ -n "$GUENSTIGE_HEUTE" ]; then
+# === Für heute: entweder Liste oder Warnung ===
+if [ -z "$GUENSTIGE_HEUTE" ]; then
+  MESSAGE+="
+⚠️ Für heute sind keine günstigen Stromstunden mehr verfügbar."
+else
   MESSAGE+="
 Heute:
 $GUENSTIGE_HEUTE
 "
 fi
 
+# === Für morgen ===
 if [ "$HAT_MORGEN" -gt 0 ]; then
-  if [ -n "$GUENSTIGE_MORGEN" ]; then
+  if [ -z "$GUENSTIGE_MORGEN" ]; then
+    MESSAGE+="
+⚠️ Für morgen wurden keine günstigen Preise unter 20 Cent gefunden."
+  else
     MESSAGE+="
 Morgen:
 $GUENSTIGE_MORGEN
@@ -175,17 +191,17 @@ $GUENSTIGE_MORGEN
   fi
 else
   MESSAGE+="
-⚠️ Für morgen sind noch keine Preise verfügbar. Ich prüfe später erneut.
-"
+⚠️ Für morgen sind noch keine Preise verfügbar. Ich prüfe später erneut."
 fi
 
-MESSAGE+="📅 Stand: $(date +"%d.%m.%Y %H:%M Uhr")"
+# === Standzeit und Versand ===
+MESSAGE+="
+📅 Stand: $(date +"%d.%m.%Y %H:%M Uhr")"
 
-# === Nachricht senden ===
 sende_info "$MESSAGE"
 log "Nachricht an Telegram gesendet."
 
-# === LOCKFILE SCHREIBEN, SOBALD MORGEN-FORECAST VORHANDEN ===
+# === Lockfile schreiben ===
 if [ "$HAT_MORGEN" -gt 0 ]; then
   touch "$LOCKFILE"
   log "Lockfile geschrieben: $LOCKFILE (Preise für morgen verfügbar)"

@@ -37,7 +37,7 @@ for arg in "$@"; do
 done
 
 NOW_EPOCH=$(date +"%s")
-ZIEL_EPOCH=$(date -d "+1 hour" +"%s")   # Reminder eine Stunde vor Phase-Start
+ZIEL_EPOCH=$(date -d "+1 hour" +"%s")    # Reminder eine Stunde vor Phase-Start
 
 # --- Ladevorgang abfragen ---
 is_charging=$(curl -s "$EVCC_API" | jq -r '.result.loadpoints[0].charging // .result.loadpoints[0].vehicleConnected')
@@ -95,18 +95,19 @@ for PHASE in "${PHASES[@]}"; do
   DIFF_SEC=$((PHASE_START_EPOCH - ZIEL_EPOCH))
 
   # Hash für diese Phase (gegen Mehrfachbenachrichtigung)
-  HASH="reminder_${PHASE_LABEL}_$(date -d "$PHASE_START" +%Y-%m-%d_%H:%M)"
+  
+    LAST_LINE=$(echo "$PHASE" | tail -n1 | awk '{print $1}')
+  HASH="reminder_${PHASE_LABEL}_$(date -d "$PHASE_START" +%Y-%m-%d_%H:%M)_$(date -d "$LAST_LINE" +%H:%M)"
 
   if $TESTMODE || (( DIFF_SEC >= -TOLERANZ_MIN*60 && DIFF_SEC <= TOLERANZ_MIN*60 )); then
     if [[ "$IGNORE_LOCK" != true ]] && grep -q "$HASH" "$LOCKFILE" 2>/dev/null; then
       continue
     fi
-    [[ "$IGNORE_LOCK" != true ]] && echo "$HASH" >> "$LOCKFILE"
 
     START_LOCAL=$(date -d "$PHASE_START" +"%H:%M")
-    LAST_LINE=$(echo "$PHASE" | tail -n1 | awk '{print $1}')
     ENDE_LOCAL=$(date -d "$LAST_LINE +59 min" +"%H:%M")
     STAND=$(date +"%d.%m.%Y %H:%M Uhr")
+    [[ "$IGNORE_LOCK" != true ]] && echo "$HASH" >> "$LOCKFILE"
 
     # Günstigste Stunde im Block finden
     min_idx=0; min_preis=999
@@ -118,6 +119,7 @@ for PHASE in "${PHASES[@]}"; do
         min_idx=$idx
       fi
     done
+
 
     # Preisliste aufbauen
     PREISLISTE=""

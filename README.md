@@ -5,8 +5,7 @@ Ideal für alle, die ihr E-Auto optimal günstig laden und dabei immer informier
 
 ---
 
-[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20me%20a%20coffee-Ko--fi-FF5E5B?style=flat-square&logo=ko-fi&logoColor=white)](https://ko-fi.com/pello1234)
-
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20me%20a%20coffee-Ko--fi-FF5E5B?style=flat-square\&logo=ko-fi\&logoColor=white)](https://ko-fi.com/pello1234)
 
 ## 🛑 Voraussetzungen
 
@@ -36,6 +35,7 @@ Um diese Automatisierung zu nutzen, benötigst du:
 * **Einfache Konfiguration per ****`.env`****-Datei** – keine Code-Anpassung nötig
 * Komplett als Shell/Bash-Skripte, läuft lokal (z. B. auf Raspberry Pi, Home Server, NAS etc.)
 * Kein Cloud-Backend, keine Drittanbieter-Cloud nötig
+* **Testmodus:** `--ignore-lock` erlaubt manuelles Ausführen der Scripte trotz evtl. schon geschriebenen Lockfile
 
 ---
 
@@ -99,6 +99,15 @@ Du erhältst:
 
    Passe `/pfad/zu/` an deine tatsächlichen Speicherorte an!
 
+   **Testmodus Preis-Check (trotz Lockfile):**
+
+   ```bash
+   bash /pfad/zu/tibber-price-check.sh --ignore-lock
+   ```
+   ```bash
+   bash /pfad/zu/tibber-price-reminder.sh --ignore-lock
+   ```
+
 ---
 
 ## ⚙️ Konfiguration (`token.env`)
@@ -150,7 +159,7 @@ HA_API_URL=http://dein-ha-server:8123/api/states/sensor.id_4_battery_target_char
 
 ### Tibber Forecast
 
-```
+```text
 ⚡ Tibber Forecast für heute & morgen ⚡
 
 📉 Günstiger Strom unter 20 Cent:
@@ -168,11 +177,18 @@ Morgen:
 📅 Stand: 31.05.2025 14:53 Uhr
 ```
 
+**Wenn keine günstigen Stunden mehr verfügbar sind:**
+
+```text
+⚠️ Für heute sind keine günstigen Stromstunden mehr verfügbar.
+⚠️ Für morgen wurden keine günstigen Preise unter 20 Cent gefunden.
+```
+
 ---
 
 ### Reminder vor günstigen Ladephasen
 
-```
+```text
 🔔 Günstige Strompreisphase beginnt bald! (heute)
 
 💡 Dauer: 11:00 bis 17:59 Uhr
@@ -192,7 +208,7 @@ Morgen:
 
 ### Automatische Ladeempfehlung
 
-```
+```text
 🔋 Ladeempfehlung für dein E-Auto:
 💡 Lade von 14:00 bis 16:00 Uhr (heute, alle Preise <20 Cent)
 ⏳ Geschätzte Ladedauer: 1 Std 16 Min
@@ -267,6 +283,13 @@ shell_command:
 * **Preisgrenze zu hoch/zu niedrig?**
   Passe `PREIS_GRENZE` in deiner `.env` an – z.B. 0.18 für besonders günstige Phasen.
 
+* **Testausführung trotz Lockfile?**
+  Führe das Skript mit `--ignore-lock` aus:
+
+  ```bash
+  bash /pfad/zu/tibber-price-check.sh --ignore-lock
+  ```
+
 ---
 
 ## ☕️ Mitmachen & Spenden
@@ -274,7 +297,7 @@ shell_command:
 Du nutzt das Projekt gerne oder hast ein paar Cent gespart?
 Unterstütze mich gerne mit einer kleinen Spende:
 
-[![Ko-fi](https://img.shields.io/badge/Buy%20me%20a%20coffee-Ko--fi-FF5E5B?style=flat-square&logo=ko-fi&logoColor=white)](https://ko-fi.com/pello1234)
+[![Ko-fi](https://img.shields.io/badge/Buy%20me%20a%20coffee-Ko--fi-FF5E5B?style=flat-square\&logo=ko-fi\&logoColor=white)](https://ko-fi.com/pello1234)
 
 ---
 
