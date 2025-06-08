@@ -1,5 +1,6 @@
 #!/bin/bash
 
+# === Parameterverarbeitung ===
 TESTMODE=false
 IGNORE_LOCK=false
 for arg in "$@"; do
@@ -32,7 +33,6 @@ LOCK_DIR="/tmp"
 # === Nächste günstige Phase ermitteln ===
 PHASE=$(grep -E "^(20|21)[0-9]{2}-" "$GUENSTIGE" | while read -r zeile; do
   ts=$(echo "$zeile" | awk '{print $1}')
-  preis=$(echo "$zeile" | awk '{print $2}')
   label=$(echo "$zeile" | awk '{print $3}')
   start_epoch=$(date -d "$ts" +%s)
   diff_sec=$((start_epoch - JETZT_EPOCH))
@@ -66,9 +66,7 @@ TEXT=""
 while read -r ts preis label; do
   [ "$label" != "$LABEL" ] && continue
   ts_epoch=$(date -d "$ts" +%s)
-  if [ "$ts_epoch" -lt "$PHASE_EPOCH" ]; then
-    continue
-  fi
+  if [ "$ts_epoch" -lt "$PHASE_EPOCH" ]; then continue; fi
   diff=$((ts_epoch - PHASE_EPOCH))
   [ $diff -gt 21600 ] && break
 
@@ -81,16 +79,18 @@ while read -r ts preis label; do
   preis_cmp=$(awk -v p="$preis" 'BEGIN { printf "%.4f", p }')
   if (( $(echo "$preis_cmp < $BEST_PREIS" | bc -l) )); then
     BEST_PREIS="$preis_cmp"
-    zeile="$zeile⭐️"
+    BEST_ZEILE="$zeile⭐️"
+  else
+    TEXT+="$zeile"$'\n'
   fi
-
-  TEXT+="$zeile"$'\n'
   ENDE_EPOCH=$ts_epoch
 done < "$GUENSTIGE"
 
+TEXT="$BEST_ZEILE"$'\n'"$TEXT"
+
 DAUER_VON=$(date -d "@$PHASE_EPOCH" +%H:%M)
 DAUER_BIS=$(date -d "@$((ENDE_EPOCH + 3600))" +%H:%M)
-DAUER_LABEL=$( [ "$LABEL" == "heute" ] && echo "heute" || echo "morgen" )
+DAUER_LABEL=$([ "$LABEL" == "heute" ] && echo "heute" || echo "morgen")
 
 NACHRICHT="🔔 Günstige Strompreisphase beginnt bald!
 
@@ -104,6 +104,11 @@ curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
   --data-urlencode "chat_id=$TELEGRAM_CHAT_ID" \
   --data-urlencode "text=$NACHRICHT" \
   -d parse_mode=Markdown >/dev/null
+
+# Ladeempfehlungsskript ausführen (optional)
+if [ -x "$LADEEMPFEHLUNG_SH" ]; then
+  "$LADEEMPFEHLUNG_SH" --from-reminder
+fi
 
 touch "$LOCKFILE"
 log "Reminder gesendet für $PHASE_HASH ($DAUER_LABEL $DAUER_VON-$DAUER_BIS)."
