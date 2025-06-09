@@ -1,5 +1,16 @@
 # Changelog
 
+## [v1.2.0] – 2025-06-09
+
+### Added
+- **Reminder- und Ladeempfehlungs-Skript prüfen jetzt automatisch, ob das Auto gerade geladen wird (via EVCC API).**
+    - Ist ein Ladevorgang aktiv, wird im Log notiert und das Skript bricht ab.
+    - Im Ladeempfehlungs-Skript wird in diesem Fall zusätzlich eine Telegram-Nachricht verschickt.
+- Log-Funktion in beiden Skripten jetzt am Anfang platziert und überall konsistent nutzbar.
+
+### Changed
+- Klarere Trennung und Reihenfolge der Initialisierungs- und Prüf-Logik in beiden Skripten.
+
 ## [v1.1.2] – 2025-06-08
 
 ### Added

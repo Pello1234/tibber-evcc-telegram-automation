@@ -1,5 +1,11 @@
 #!/bin/bash
 
+# === Logging ===
+log() {
+  LOGFILE_PATH="${REMINDER_LOG:-/tmp/reminder.log}"
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >> "$LOGFILE_PATH"
+}
+
 # === Parameterverarbeitung ===
 TESTMODE=false
 IGNORE_LOCK=false
@@ -19,35 +25,64 @@ else
   exit 1
 fi
 
-# === Logging ===
-log() {
-  LOGFILE_PATH="${REMINDER_LOG:-/tmp/reminder.log}"
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >> "$LOGFILE_PATH"
-}
+# === prüfen, ob das Auto gerade geladen wird ===
+CHARGING=$(curl -s "$EVCC_API" | jq -r '.result.loadpoints[0].charging' 2>/dev/null)
+if [ "$CHARGING" = "true" ]; then
+  log "Auto lädt bereits, kein Reminder/Ladeempfehlung nötig."
+  exit 0
+fi
 
 # === Konfiguration ===
 TOLERANZ_SEK=$((TOLERANZ_MIN * 60))
 JETZT_EPOCH=$(date +%s)
 LOCK_DIR="/tmp"
 
-# === Nächste günstige Phase ermitteln ===
-PHASE=$(grep -E "^(20|21)[0-9]{2}-" "$GUENSTIGE" | while read -r zeile; do
-  ts=$(echo "$zeile" | awk '{print $1}')
-  preis=$(echo "$zeile" | awk '{print $2}')
-  label=$(echo "$zeile" | awk '{print $3}')
-  start_epoch=$(date -d "$ts" +%s)
-  diff_sec=$((start_epoch - JETZT_EPOCH))
-
-  if [ "$TESTMODE" = true ] || [ "$IGNORE_LOCK" = true ]; then
-    echo "$ts $label"
-    break
+# === Günstige Stunden einlesen & Phasen (Blöcke) bilden ===
+block_start=""
+block_end=""
+block_label=""
+prev_epoch=0
+first_reminder_sent=false
+PHASE=""
+while read -r ts preis label; do
+  cur_epoch=$(date -d "$ts" +%s)
+  if [ -z "$block_start" ]; then
+    block_start="$ts"
+    block_end="$ts"
+    block_label="$label"
+    prev_epoch="$cur_epoch"
+    continue
+  fi
+  # Prüfe, ob aktuelle Stunde Teil des Blocks ist (1h Unterschied & gleiches Label)
+  if [ $((cur_epoch - prev_epoch)) -eq 3600 ] && [ "$label" = "$block_label" ]; then
+    block_end="$ts"
+    prev_epoch="$cur_epoch"
+    continue
   fi
 
+  # Block-Ende erreicht: Reminder für Block-Start prüfen
+  block_start_epoch=$(date -d "$block_start" +%s)
+  diff_sec=$((block_start_epoch - JETZT_EPOCH))
+  if [ "$first_reminder_sent" = false ] && [ "$diff_sec" -le "$TOLERANZ_SEK" ] && [ "$diff_sec" -ge -$TOLERANZ_SEK ]; then
+    PHASE="$block_start $block_end $block_label"
+    first_reminder_sent=true
+    break
+  fi
+  # Nächsten Block starten
+  block_start="$ts"
+  block_end="$ts"
+  block_label="$label"
+  prev_epoch="$cur_epoch"
+done < <(grep -E "^(20|21)[0-9]{2}-" "$GUENSTIGE")
+
+# Letzten Block prüfen, falls keine Phase bisher gefunden wurde
+if [ "$first_reminder_sent" = false ] && [ -n "$block_start" ]; then
+  block_start_epoch=$(date -d "$block_start" +%s)
+  diff_sec=$((block_start_epoch - JETZT_EPOCH))
   if [ "$diff_sec" -le "$TOLERANZ_SEK" ] && [ "$diff_sec" -ge -$TOLERANZ_SEK ]; then
-    echo "$ts $label"
-    break
+    PHASE="$block_start $block_end $block_label"
   fi
-done)
+fi
 
 # === Phase prüfen ===
 if [ -z "$PHASE" ]; then
@@ -55,10 +90,12 @@ if [ -z "$PHASE" ]; then
   exit 0
 fi
 
-# === Startzeit und Label extrahieren ===
+# === Start- und Endzeit, Label extrahieren ===
 START_TS=$(echo "$PHASE" | awk '{print $1}')
-ORIG_LABEL=$(echo "$PHASE" | awk '{print $2}')
+END_TS=$(echo "$PHASE" | awk '{print $2}')
+ORIG_LABEL=$(echo "$PHASE" | awk '{print $3}')
 PHASE_EPOCH=$(date -d "$START_TS" +%s)
+ENDE_EPOCH=$(date -d "$END_TS" +%s)
 
 # === Menschliches Label für Anzeige erzeugen ===
 START_DATUM=$(date -d "$START_TS" +%Y-%m-%d)
@@ -81,17 +118,17 @@ if [ "$IGNORE_LOCK" != true ] && [ -f "$LOCKFILE" ]; then
   exit 0
 fi
 
-# === Stunden der Phase sammeln ===
-ENDE_EPOCH=$PHASE_EPOCH
-BEST_PREIS=999
+# === Stunden im Block einsammeln und sortiert aufbereiten ===
 TEXT=""
+BEST_PREIS=999
+BEST_ZEILE=""
 
 while read -r ts preis label; do
-  [ "$label" != "$ORIG_LABEL" ] && continue
+  # Nur innerhalb Block und passendes Label
   ts_epoch=$(date -d "$ts" +%s)
-  if [ "$ts_epoch" -lt "$PHASE_EPOCH" ]; then continue; fi
-  diff=$((ts_epoch - PHASE_EPOCH))
-  [ $diff -gt 21600 ] && break  # max 6 Stunden
+  [ "$label" != "$ORIG_LABEL" ] && continue
+  [ "$ts_epoch" -lt "$PHASE_EPOCH" ] && continue
+  [ "$ts_epoch" -gt "$ENDE_EPOCH" ] && continue
 
   stunde=$(date -d "$ts" +%H)
   von="${stunde}:00"
@@ -106,13 +143,12 @@ while read -r ts preis label; do
   else
     TEXT+="$zeile"$'\n'
   fi
-  ENDE_EPOCH=$ts_epoch
 done < "$GUENSTIGE"
 
 TEXT="$BEST_ZEILE"$'\n'"$TEXT"
 
-DAUER_VON=$(date -d "@$PHASE_EPOCH" +%H:%M)
-DAUER_BIS=$(date -d "@$((ENDE_EPOCH + 3600))" +%H:%M)
+DAUER_VON=$(date -d "$START_TS" +%H:%M)
+DAUER_BIS=$(date -d "$END_TS 1 hour" +%H:%M)
 
 NACHRICHT="🔔 Günstige Strompreisphase beginnt bald!
 

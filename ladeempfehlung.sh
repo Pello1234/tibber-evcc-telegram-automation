@@ -1,5 +1,11 @@
+# Dieses Skript gibt eine Ladeempfehlung für EVs mit EVCC-API und Tibber-Preisprognose.
+# Voraussetzung: .env-Datei mit EVCC_API, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID usw.
+
 #!/bin/bash
 set -euo pipefail
+
+# === Logging  ===
+log() { echo "[$(date +'%Y-%m-%d %H:%M:%S')] $1" >> "$LOG"; }
 
 # === Konfiguration aus ENV-Datei einlesen ===
 ENVFILE="${ENVFILE:-/home/pi/tibber-evcc-telegram-automation/token.env}"
@@ -12,11 +18,19 @@ else
   exit 1
 fi
 
+# === Laden prüfen, ggf. abbrechen ===
+CHARGING=$(curl -s "$EVCC_API" | jq -r '.result.loadpoints[0].charging' 2>/dev/null)
+if [ "$CHARGING" = "true" ]; then
+  log "Ladeempfehlung: Auto lädt bereits, kein Vorschlag gesendet."
+  curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
+    --data-urlencode "chat_id=$TELEGRAM_CHAT_ID" \
+    --data-urlencode "text=⚡ *Ladeempfehlung*: Das Auto wird bereits geladen, keine Empfehlung nötig!" \
+    --data-urlencode "parse_mode=Markdown"
+  exit 0
+fi
+
 # Ab hier werden alle Variablen aus token.env verwendet:
 # TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, EVCC_API, WALLBOX_KW, ALLE, LOG, HA_TOKEN_FILE, HA_API_URL
-
-# Log-Funktion: Nur Klartext, keine Emojis/Umlaute/Sonderzeichen
-log() { echo "[$(date +'%Y-%m-%d %H:%M:%S')] $1" >> "$LOG"; }
 
 # Preisformat NUR für Log, KEINE Emojis/Umlaute!
 format_preis_log() {
