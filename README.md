@@ -105,7 +105,7 @@ Du erhältst:
    bash /pfad/zu/tibber-price-check.sh --ignore-lock
    ```
    ```bash
-   bash /pfad/zu/tibber-price-reminder.sh --ignore-lock
+   bash /pfad/zu/tibber-price-reminder.sh --test --ignore-lock
    ```
 
 ---
@@ -290,7 +290,7 @@ shell_command:
   Führe das Skript mit `--ignore-lock` aus:
 
   ```bash
-  bash /pfad/zu/tibber-price-check.sh --ignore-lock
+  bash /pfad/zu/tibber-price-check.sh --test --ignore-lock
   ```
 
 ---
