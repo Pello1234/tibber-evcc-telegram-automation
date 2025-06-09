@@ -36,6 +36,9 @@ Um diese Automatisierung zu nutzen, benötigst du:
 * Komplett als Shell/Bash-Skripte, läuft lokal (z. B. auf Raspberry Pi, Home Server, NAS etc.)
 * Kein Cloud-Backend, keine Drittanbieter-Cloud nötig
 * **Testmodus:** `--ignore-lock` erlaubt manuelles Ausführen der Scripte trotz evtl. schon geschriebenen Lockfile
+* Reminder- und Ladeempfehlungs-Skript **prüfen vor Ausführung automatisch**, ob das Fahrzeug gerade geladen wird (EVCC-API).
+  * Ist bereits ein Ladevorgang aktiv, wird keine erneute Empfehlung oder Erinnerung gesendet (inkl. Log und ggf. Telegram-Benachrichtigung).
+
 
 ---
 
