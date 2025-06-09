@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.1] – 2025-06-09
+
+### Added
+- Sofort-Ladeempfehlung per Telegram-Befehl `/ladeempfehlung` (Home Assistant Integration)
+- README: Anleitung & YAML-Beispiel zum manuellen Auslösen der Ladeempfehlung
+
+
 ## [v1.2.0] – 2025-06-09
 
 ### Added
