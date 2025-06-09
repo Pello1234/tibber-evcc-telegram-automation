@@ -38,6 +38,7 @@ Um diese Automatisierung zu nutzen, benötigst du:
 * **Testmodus:** `--ignore-lock` erlaubt manuelles Ausführen der Scripte trotz evtl. schon geschriebenen Lockfile
 * Reminder- und Ladeempfehlungs-Skript **prüfen vor Ausführung automatisch**, ob das Fahrzeug gerade geladen wird (EVCC-API).
   * Ist bereits ein Ladevorgang aktiv, wird keine erneute Empfehlung oder Erinnerung gesendet (inkl. Log und ggf. Telegram-Benachrichtigung).
+* **Ladeempfehlung manuell per Telegram-Bot-Befehl `/ladeempfehlung` anfordern (über Home Assistant Integration)**
 
 
 ---
@@ -270,6 +271,41 @@ shell_command:
 > Wenn Home Assistant und deine Bash-Skripte in getrennten Containern oder auf unterschiedlichen Systemen laufen (z. B. Home Assistant als Docker-Container, Skripte direkt auf dem Raspberry Pi), können sie **nicht direkt aufeinander zugreifen**. Auch das lokale Ausführen von Shell-Kommandos aus Home Assistant heraus funktioniert dann nicht, weil Container voneinander isoliert sind.
 >
 > Die empfohlene Lösung ist deshalb, das gewünschte Bash-Skript **per SSH von Home Assistant aus remote zu starten** (siehe oben). Das ist sicher, flexibel und funktioniert auch bei Container-Setups, auf NAS, in VMs oder bei verteilten Systemen.
+
+---
+
+## 🔘 Sofort-Ladeempfehlung per Telegram-Befehl
+
+Du kannst jetzt jederzeit eine **Ladeempfehlung manuell per Telegram-Bot anfordern**!
+Sende dazu einfach im Chat mit deinem Bot den Befehl:
+
+```text
+/ladeempfehlung
+```
+
+**Voraussetzung:**
+
+* Dein Bot ist bereits in Home Assistant (z. B. als `telegram_bot:`-Integration) eingebunden.
+* Du hast die folgende Automation in deiner `automations.yaml` (bzw. im Automation-Editor) hinterlegt:
+
+```yaml
+- alias: "Ladeempfehlung auf Telegram Befehl"
+  trigger:
+    - platform: event
+      event_type: telegram_command
+      event_data:
+        command: '/ladeempfehlung'
+  action:
+    - service: shell_command.ladeempfehlung_id4
+```
+
+**Ablauf:**
+
+1. Du sendest `/ladeempfehlung` an deinen Bot.
+2. Home Assistant empfängt den Befehl und startet das Skript `ladeempfehlung.sh` (wie oben beschrieben).
+3. Die Ladeempfehlung wird wie gewohnt per Telegram an dich zurückgesendet.
+
+So bekommst du die Ladeprognose jederzeit **on demand** – unabhängig von Zeitplan oder Automatik!
 
 ---
 
