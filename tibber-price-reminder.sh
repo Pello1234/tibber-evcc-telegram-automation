@@ -49,16 +49,31 @@ PHASE=$(grep -E "^(20|21)[0-9]{2}-" "$GUENSTIGE" | while read -r zeile; do
   fi
 done)
 
-
+# === Phase prüfen ===
 if [ -z "$PHASE" ]; then
   log "Keine Phase in Toleranz gefunden."
   exit 0
 fi
 
+# === Startzeit und Label extrahieren ===
 START_TS=$(echo "$PHASE" | awk '{print $1}')
-LABEL=$(echo "$PHASE" | awk '{print $2}')
+ORIG_LABEL=$(echo "$PHASE" | awk '{print $2}')
 PHASE_EPOCH=$(date -d "$START_TS" +%s)
-PHASE_HASH="reminder_${LABEL}_$(date -d "$START_TS" +%Y-%m-%d_%H:%M)"
+
+# === Menschliches Label für Anzeige erzeugen ===
+START_DATUM=$(date -d "$START_TS" +%Y-%m-%d)
+HEUTE_DATUM=$(date +%Y-%m-%d)
+MORGEN_DATUM=$(date -d "tomorrow" +%Y-%m-%d)
+
+if [ "$START_DATUM" = "$HEUTE_DATUM" ]; then
+  DAUER_LABEL="heute"
+elif [ "$START_DATUM" = "$MORGEN_DATUM" ]; then
+  DAUER_LABEL="morgen"
+else
+  DAUER_LABEL="am $(date -d "$START_TS" +%d.%m.%Y)"
+fi
+
+PHASE_HASH="reminder_${DAUER_LABEL}_$(date -d "$START_TS" +%Y-%m-%d_%H:%M)"
 LOCKFILE="$LOCK_DIR/$PHASE_HASH"
 
 if [ "$IGNORE_LOCK" != true ] && [ -f "$LOCKFILE" ]; then
@@ -72,11 +87,11 @@ BEST_PREIS=999
 TEXT=""
 
 while read -r ts preis label; do
-  [ "$label" != "$LABEL" ] && continue
+  [ "$label" != "$ORIG_LABEL" ] && continue
   ts_epoch=$(date -d "$ts" +%s)
   if [ "$ts_epoch" -lt "$PHASE_EPOCH" ]; then continue; fi
   diff=$((ts_epoch - PHASE_EPOCH))
-  [ $diff -gt 21600 ] && break
+  [ $diff -gt 21600 ] && break  # max 6 Stunden
 
   stunde=$(date -d "$ts" +%H)
   von="${stunde}:00"
@@ -98,7 +113,6 @@ TEXT="$BEST_ZEILE"$'\n'"$TEXT"
 
 DAUER_VON=$(date -d "@$PHASE_EPOCH" +%H:%M)
 DAUER_BIS=$(date -d "@$((ENDE_EPOCH + 3600))" +%H:%M)
-DAUER_LABEL=$([ "$LABEL" == "heute" ] && echo "heute" || echo "morgen")
 
 NACHRICHT="🔔 Günstige Strompreisphase beginnt bald!
 
@@ -113,11 +127,12 @@ curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
   --data-urlencode "text=$NACHRICHT" \
   -d parse_mode=Markdown >/dev/null
 
-# Ladeempfehlungsskript ausführen (optional)
+# === Ladeempfehlungsskript starten ===
 if [ -x "$LADEEMPFEHLUNG_SH" ]; then
   "$LADEEMPFEHLUNG_SH" --from-reminder
 fi
 
+# === Lockfile setzen (außer bei --test oder --ignore-lock) ===
 if [ "$TESTMODE" != true ] && [ "$IGNORE_LOCK" != true ]; then
   touch "$LOCKFILE"
   log "Reminder gesendet für $PHASE_HASH ($DAUER_LABEL $DAUER_VON-$DAUER_BIS)."
